@@ -116,9 +116,7 @@ public class SeekAndFlee : MonoBehaviour
 
     void AIKinematicWander()
     {
-        // aiVel = transform.eulerAngles;
-
-        float orientX = -1 * Mathf.Sin(transform.rotation.y * Mathf.Deg2Rad);
+        float orientX = Mathf.Sin(transform.rotation.y * Mathf.Deg2Rad);
         float orientZ = Mathf.Cos(transform.rotation.y * Mathf.Deg2Rad);
         Vector3 aiVel = new Vector3(orientX, 0, orientZ);
         aiVel *= maxSpeed * Time.deltaTime;
