@@ -6,18 +6,27 @@ public class SeekAndFlee : MonoBehaviour
 {
     //Define max speed for the AI to move
     public float maxSpeed = 10f;
+    // float that slowly increments LERP value over frames
+    float lerpCount = 0f;
+    // Distance over which to accelerate when starting
+    public float accelerationDistance = 5f;
     // Define radius at which an arriving AI will stop
-    public float radius = 4f;
+    public float slowRadius = 4f;
+    public float stopRadius = 1f;
     // Define Time at which an arriving AI will attempt to arrive at the target
     public float arriveTimeToTarget = 0.25f;
     // Define the maximum rotation per frame allowed for a wandering AI
     public float maxWanderRotation = 5f;
     // Defines the radius around the player in which the AI will become active
     public float ActivationRange = 20f;
+    // Whenever a Lerp is called, this float is given a timestamp;
     // Determine whether the object seeks or flees from the player
     public bool seek = true;
     public bool arrive = false;
     public bool wander = false;
+    //This bool will keep track of when  the object is accelerating
+    private bool isAccelerating = true;
+    
     // Transform of player and rigidbody of AI
     public Transform playerTrans;
     private Rigidbody rb;
@@ -46,7 +55,7 @@ public class SeekAndFlee : MonoBehaviour
         else if (arrive && !seek && !wander && (dist < ActivationRange))
         {
             aiVelocity = playerTrans.position - transform.position;
-            AIKinematicArrive(aiVelocity);
+            AIKinematicArrive(aiVelocity, dist);
         }
         else if (wander && !arrive && !seek)
         {
@@ -62,22 +71,38 @@ public class SeekAndFlee : MonoBehaviour
         }
         else
         {
-            Debug.Log("AI inactive");
+          //  Debug.Log("AI inactive");
         }
 
     }
 
-
     // recalculate the velocity vector before reassigning
     // Determine rotation based on vector
     void AIKinematicMove(Vector3 aiVel)
-    {
+    {  /* Old Factors for non-smoothed motion
         // Normalize and apply magnitude of Max Speed
         aiVel.Normalize();
+        
         // Multiply by Time.deltaTime to allow for consistency in variable frame rates
         aiVel *= (maxSpeed * Time.deltaTime);
 
         // assign the new velocity vector to the rigidbody velocity component
+        rb.velocity = aiVel;
+        */
+
+        // Changed factor to allow for smoothing
+        // Note due to velocity magnitude, effects of Lerp were either very slow or very quick in relative smaller environments
+        
+        aiVel = Vector3.Lerp(aiVel.normalized, aiVel.normalized * maxSpeed * Time.deltaTime, lerpCount/accelerationDistance);
+        if (lerpCount < accelerationDistance && isAccelerating)
+        {
+            lerpCount += 0.1f;
+            
+        } else
+        {
+            isAccelerating = false;
+        }
+        Debug.Log(lerpCount);
         rb.velocity = aiVel;
         // transform.LookAt(aiVel);
         // Create a new orientation vector based off the AI velocity (arguments for step and max rotation left at 2pi rad because no specific step is needed currently)
@@ -86,28 +111,48 @@ public class SeekAndFlee : MonoBehaviour
         transform.rotation = Quaternion.LookRotation(orientation);
     }
 
-    void AIKinematicArrive(Vector3 aiVel)
+    void AIKinematicArrive(Vector3 aiVel, float dist)
     {
-        // if the current magnitude (at this point the distance between the target and AI) is less than radius stop accepting input
-        if (aiVel.magnitude < radius)
+        
+        
+        // Alot of drifting towards target after stop occurs. This function acts as a hard break on the AI
+        if (dist < slowRadius)
         {
+            if (!isAccelerating)
+            {
+                lerpCount = 0f;
+                isAccelerating = true;
+            }
+            //Note Slow radius Cannot be the same as stop radius (divide by zero error)
+            aiVel = Vector3.Lerp(aiVel, Vector3.zero, lerpCount/(slowRadius-stopRadius));
+            if (lerpCount < (slowRadius-stopRadius) && isAccelerating)
+            {
+                lerpCount += 0.1f;
+                Debug.Log(lerpCount);
+            }
+            else
+            {
+            //  isAccelerating = false;
+            }
+            rb.velocity = aiVel;
             return;
+
         }
-        // Dividing the vector component wise by the time to arrive to establish a new vector (time based vs speed based arrival for close distances)
-        aiVel.x /= arriveTimeToTarget;
-        aiVel.z /= arriveTimeToTarget;
-        // For sake of consistency adjust the velocity of y (should not be above zero in most cases)
-        aiVel.y /= arriveTimeToTarget;
-        // Check if new magnitude is higher than max speed and slow down (longer distances)
-        if (aiVel.magnitude > maxSpeed)
+        // assign the new velocity vector to the rigidbody velocity component (with smoothing)
+        aiVel = Vector3.Lerp(aiVel.normalized, aiVel.normalized * maxSpeed * Time.deltaTime, lerpCount / accelerationDistance);
+        // Check if the object is accelerating, if it is, then increase LERP Counter
+        if (lerpCount < accelerationDistance && isAccelerating)
         {
-            aiVel.Normalize();
-            // Multiply by Time.deltaTime to allow for consistency in variable frame rates
-            aiVel *= (maxSpeed * Time.deltaTime);
+            lerpCount += 0.1f;
         }
-        // assign the new velocity vector to the rigidbody velocity component
+        // when its reached its max velocity turn off isAccelerating so it doesnt increase the lerpCounter
+        else
+        {
+
+            isAccelerating = false;
+        }
         rb.velocity = aiVel;
-        // transform.LookAt(aiVel);
+     
         // Create a new orientation vector based off the AI velocity (arguments for step and max rotation left at 2pi rad because no specific step is needed currently)
         Vector3 orientation = Vector3.RotateTowards(transform.forward, aiVel, 2 * Mathf.PI, 2 * Mathf.PI);
         // assign that orientation value to the transform
